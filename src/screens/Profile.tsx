@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useStore, type AppData } from '../store'
 import { ProfileForm } from '../components/ProfileForm'
 import { Header } from '../components/Header'
-import { Button, Card } from '../components/ui'
+import { Button, Card, ConfirmButton } from '../components/ui'
 import { IconDb, IconDownload, IconSparkle, IconTrash, IconUpload } from '../components/Icons'
 import { today } from '../lib/date'
 
@@ -39,7 +39,6 @@ export function ProfileScreen() {
     try {
       const d = JSON.parse(await file.text()) as AppData
       if (!Array.isArray(d.entries) || !Array.isArray(d.weights)) throw new Error('formato')
-      if (!confirm('¿Reemplazar todos tus datos actuales con el respaldo?')) return
       importData({ profile: d.profile ?? null, isDemo: !!d.isDemo, entries: d.entries, weights: d.weights, customFoods: d.customFoods ?? [], recents: d.recents ?? [] })
       setFormKey((k) => k + 1)
       flash('Respaldo importado')
@@ -59,9 +58,9 @@ export function ProfileScreen() {
               <div className="flex-1 text-sm">
                 <p className="font-medium">Modo de ejemplo activo</p>
                 <p className="mt-0.5 text-soft">Cuando quieras usar MacroFit de verdad, borra los datos de ejemplo y configura tu perfil desde cero.</p>
-                <Button variant="ghost" className="mt-3 !py-2.5 text-sm" onClick={() => { if (confirm('¿Borrar los datos de ejemplo y empezar?')) resetAll() }}>
+                <ConfirmButton variant="ghost" className="mt-3 !py-2.5 text-sm" confirmText="Toca de nuevo para borrar el ejemplo" onConfirm={resetAll}>
                   Empezar con mis datos
-                </Button>
+                </ConfirmButton>
               </div>
             </div>
           </Card>
@@ -82,10 +81,10 @@ export function ProfileScreen() {
           <input ref={fileRef} type="file" accept="application/json,.json" hidden
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.target.value = '' }} />
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button variant="ghost" className="text-sm" onClick={() => { if (confirm('Esto reemplaza tus datos por datos de ejemplo. ¿Continuar?')) { loadDemo(); setFormKey((k) => k + 1) } }}>Datos de ejemplo</Button>
-            <Button variant="danger" className="flex items-center justify-center gap-2 text-sm" onClick={() => { if (confirm('¿Borrar TODOS tus datos? Esta acción no se puede deshacer.')) resetAll() }}>
+            <ConfirmButton variant="ghost" className="text-sm" confirmText="¿Reemplazar tus datos?" onConfirm={() => { loadDemo(); setFormKey((k) => k + 1) }}>Datos de ejemplo</ConfirmButton>
+            <ConfirmButton variant="danger" className="flex items-center justify-center gap-2 text-sm" confirmText="¿Borrar todo? Toca otra vez" onConfirm={resetAll}>
               <IconTrash width={17} height={17} /> Borrar todo
-            </Button>
+            </ConfirmButton>
           </div>
         </Card>
 

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`rounded-3xl border border-line bg-card p-4 ${className}`}>{children}</div>
@@ -72,5 +72,22 @@ export function Empty({ icon, title, text, action }: { icon: ReactNode; title: s
       {text && <p className="mt-1 text-sm text-muted">{text}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
+  )
+}
+
+/** Botón que pide un segundo toque para confirmar (sin diálogos del sistema). */
+export function ConfirmButton({ onConfirm, confirmText = '¿Seguro? Toca de nuevo', children, ...p }:
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> & { variant?: 'primary' | 'ghost' | 'danger'; onConfirm: () => void; confirmText?: string }) {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const id = setTimeout(() => setArmed(false), 3500)
+    return () => clearTimeout(id)
+  }, [armed])
+  return (
+    <Button {...p} variant={armed ? 'danger' : p.variant}
+      onClick={() => { if (armed) { setArmed(false); onConfirm() } else setArmed(true) }}>
+      {armed ? confirmText : children}
+    </Button>
   )
 }

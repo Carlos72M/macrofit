@@ -33,7 +33,7 @@ export function Onboarding() {
       <div className="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-brand-2/20 blur-3xl" />
 
       <div className="relative flex flex-1 flex-col justify-center py-10">
-        <img src="/icons/icon.svg" alt="" className="animate-rise mb-6 h-20 w-20 rounded-[22px] shadow-[0_20px_50px_-15px_rgba(52,211,153,.5)]" />
+        <img src={`${import.meta.env.BASE_URL}icons/icon.svg`} alt="" className="animate-rise mb-6 h-20 w-20 rounded-[22px] shadow-[0_20px_50px_-15px_rgba(52,211,153,.5)]" />
         <h1 className="animate-rise font-display text-[42px] font-bold leading-[1.05] tracking-tight">
           Macro<span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">Fit</span>
         </h1>
