@@ -1,22 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
 import { activeCustomFoods, useStore } from '../store'
 import type { AddTarget } from '../App'
-import type { Food, LogEntry, MealType } from '../lib/types'
-import { macrosFor, round } from '../lib/calc'
+import type { Food, LogEntry, MealType, RecipeIngredient } from '../lib/types'
+import { macrosFor, round, sumMacros } from '../lib/calc'
 import { searchLocal, searchOpenFoodFacts, SOURCE_LABEL } from '../lib/foodApi'
 import { CATEGORIES } from '../data/foods'
 import { MEALS, MEAL_LABEL, COLORS } from '../lib/meals'
 import { relativeLabel } from '../lib/date'
 import { Sheet } from '../components/Sheet'
 import { Button, Label, NumberField, Segmented } from '../components/ui'
-import { IconChevronL, IconEdit, IconGlobe, IconPlus, IconSearch, IconTrash } from '../components/Icons'
+import { IconChevronL, IconEdit, IconGlobe, IconPlate, IconPlus, IconSearch, IconTrash } from '../components/Icons'
 
-type Step = { kind: 'search' } | { kind: 'detail'; food: Food } | { kind: 'custom'; initial?: Food }
+type Step =
+  | { kind: 'search' }
+  | { kind: 'detail'; food: Food }
+  | { kind: 'custom'; initial?: Food }
+  | { kind: 'recipe' }
+  | { kind: 'ingSearch' }
+  | { kind: 'ingDetail'; food: Food; index?: number }
+
+interface RecipeDraft {
+  id?: string
+  name: string
+  portions: number
+  portionLabel: string
+  ingredients: RecipeIngredient[]
+}
+
+const newDraft = (): RecipeDraft => ({ name: '', portions: 1, portionLabel: 'porción', ingredients: [] })
+
+const draftFrom = (f: Food): RecipeDraft => ({
+  id: f.id,
+  name: f.name,
+  portions: f.recipe?.portions ?? 1,
+  portionLabel: f.servings[0]?.label ?? 'porción',
+  ingredients: f.recipe?.ingredients ?? [],
+})
 
 export function AddFoodFlow({ target, editing, onClose }: { target: AddTarget | null; editing: LogEntry | null; onClose: () => void }) {
   const open = !!target || !!editing
   const [step, setStep] = useState<Step>({ kind: 'search' })
   const [meal, setMeal] = useState<MealType>('comida')
+  const [draft, setDraft] = useState<RecipeDraft>(newDraft)
 
   useEffect(() => {
     if (editing) { setStep({ kind: 'detail', food: editing.food }); setMeal(editing.meal) }
@@ -24,25 +49,71 @@ export function AddFoodFlow({ target, editing, onClose }: { target: AddTarget | 
   }, [target, editing])
 
   const date = editing?.date ?? target?.date ?? ''
-  const title = step.kind === 'search' ? `Agregar a ${MEAL_LABEL[meal]}` : step.kind === 'custom' ? 'Alimento personalizado' : editing ? 'Editar registro' : 'Cantidad'
+  const titles: Record<Step['kind'], string> = {
+    search: `Agregar a ${MEAL_LABEL[meal]}`,
+    custom: 'Alimento personalizado',
+    detail: editing ? 'Editar registro' : 'Cantidad',
+    recipe: draft.id ? 'Editar platillo' : 'Crear platillo',
+    ingSearch: 'Agregar ingrediente',
+    ingDetail: 'Ingrediente',
+  }
+
+  const editFood = (f: Food) => {
+    if (f.recipe) { setDraft(draftFrom(f)); setStep({ kind: 'recipe' }) }
+    else setStep({ kind: 'custom', initial: f })
+  }
 
   return (
-    <Sheet open={open} onClose={onClose} title={title} full>
+    <Sheet open={open} onClose={onClose} title={titles[step.kind]} full>
       {step.kind === 'search' && (
         <FoodSearch meal={meal} setMeal={setMeal} date={date}
           onPick={(food) => setStep({ kind: 'detail', food })}
-          onCustom={() => setStep({ kind: 'custom' })} />
+          onCustom={() => setStep({ kind: 'custom' })}
+          onRecipe={() => { setDraft(newDraft()); setStep({ kind: 'recipe' }) }} />
       )}
       {step.kind === 'detail' && (
         <FoodDetail key={step.food.id} food={step.food} meal={meal} setMeal={setMeal} date={date} editing={editing}
           onBack={editing ? undefined : () => setStep({ kind: 'search' })}
-          onEditFood={step.food.source === 'custom' ? () => setStep({ kind: 'custom', initial: step.food }) : undefined}
+          onEditFood={step.food.source === 'custom' && !editing ? () => editFood(step.food) : undefined}
           onDone={onClose} />
       )}
       {step.kind === 'custom' && (
         <CustomFoodForm initial={step.initial} onBack={() => setStep(step.initial ? { kind: 'detail', food: step.initial } : { kind: 'search' })}
           onSaved={(food) => setStep({ kind: 'detail', food })} onDeleted={() => setStep({ kind: 'search' })} />
       )}
+      {step.kind === 'recipe' && (
+        <RecipeBuilder draft={draft} setDraft={setDraft}
+          onBack={() => setStep({ kind: 'search' })}
+          onAddIngredient={() => setStep({ kind: 'ingSearch' })}
+          onEditIngredient={(i) => setStep({ kind: 'ingDetail', food: draft.ingredients[i].food, index: i })}
+          onSaved={(food) => setStep({ kind: 'detail', food })}
+          onDeleted={() => setStep({ kind: 'search' })} />
+      )}
+      {step.kind === 'ingSearch' && (
+        <FoodSearch mode="ingredient" excludeId={draft.id} meal={meal} setMeal={setMeal} date={date}
+          onPick={(food) => setStep({ kind: 'ingDetail', food })}
+          onBack={() => setStep({ kind: 'recipe' })} />
+      )}
+      {step.kind === 'ingDetail' && (() => {
+        const idx = step.index
+        const current = idx !== undefined ? draft.ingredients[idx] : undefined
+        return (
+          <FoodDetail key={`ing-${step.food.id}-${idx ?? 'new'}`} food={step.food} meal={meal} setMeal={setMeal} date={date} editing={null}
+            onBack={() => setStep(idx !== undefined ? { kind: 'recipe' } : { kind: 'ingSearch' })}
+            onDone={() => setStep({ kind: 'recipe' })}
+            ingredient={{
+              initial: current,
+              onSubmit: (ing) => setDraft((d) => {
+                // Guardamos una copia sin receta anidada para que el platillo no crezca sin límite.
+                const { recipe: _r, ...food } = step.food
+                const item = { ...ing, food }
+                const ingredients = idx !== undefined ? d.ingredients.map((x, i) => (i === idx ? item : x)) : [...d.ingredients, item]
+                return { ...d, ingredients }
+              }),
+              onRemove: idx !== undefined ? () => setDraft((d) => ({ ...d, ingredients: d.ingredients.filter((_, i) => i !== idx) })) : undefined,
+            }} />
+        )
+      })()}
     </Sheet>
   )
 }
@@ -51,8 +122,10 @@ export function AddFoodFlow({ target, editing, onClose }: { target: AddTarget | 
 
 type Scope = 'todos' | 'recientes' | 'mios'
 
-function FoodSearch({ meal, setMeal, date, onPick, onCustom }:
-  { meal: MealType; setMeal: (m: MealType) => void; date: string; onPick: (f: Food) => void; onCustom: () => void }) {
+function FoodSearch({ meal, setMeal, date, onPick, onCustom, onRecipe, onBack, mode = 'log', excludeId }: {
+  meal: MealType; setMeal: (m: MealType) => void; date: string; onPick: (f: Food) => void
+  onCustom?: () => void; onRecipe?: () => void; onBack?: () => void; mode?: 'log' | 'ingredient'; excludeId?: string
+}) {
   const [q, setQ] = useState('')
   const [scope, setScope] = useState<Scope>('todos')
   const [cat, setCat] = useState<string | null>(null)
@@ -85,12 +158,18 @@ function FoodSearch({ meal, setMeal, date, onPick, onCustom }:
     return () => { clearTimeout(id); ctrl.abort() }
   }, [q, scope])
 
-  const shown = local.slice(0, q ? 40 : 60)
+  const shown = local.filter((f) => f.id !== excludeId).slice(0, q ? 40 : 60)
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-muted">{relativeLabel(date)}</div>
-      <Segmented value={meal} onChange={setMeal} options={MEALS.map((m) => ({ value: m.id, label: m.label }))} />
+      {mode === 'log' ? (
+        <>
+          <div className="text-xs text-muted">{relativeLabel(date)}</div>
+          <Segmented value={meal} onChange={setMeal} options={MEALS.map((m) => ({ value: m.id, label: m.label }))} />
+        </>
+      ) : (
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted"><IconChevronL width={18} height={18} /> Volver al platillo</button>
+      )}
 
       <div className="sticky top-0 z-10 -mx-5 bg-surface px-5 pb-2 pt-1">
         <div className="relative">
@@ -109,10 +188,18 @@ function FoodSearch({ meal, setMeal, date, onPick, onCustom }:
         </div>
       </div>
 
-      <button onClick={onCustom} className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-line px-4 py-3 text-left text-sm text-soft active:bg-card-2">
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/15 text-brand"><IconPlus width={18} height={18} /></span>
-        Crear alimento manualmente
-      </button>
+      {mode === 'log' && (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={onRecipe} className="flex items-center gap-2.5 rounded-2xl border border-dashed border-line px-3 py-3 text-left text-sm text-soft active:bg-card-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-2/15 text-brand-2"><IconPlate width={18} height={18} /></span>
+            <span className="leading-tight">Crear platillo<span className="block text-[11px] text-muted">con ingredientes</span></span>
+          </button>
+          <button onClick={onCustom} className="flex items-center gap-2.5 rounded-2xl border border-dashed border-line px-3 py-3 text-left text-sm text-soft active:bg-card-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/15 text-brand"><IconPlus width={18} height={18} /></span>
+            <span className="leading-tight">Crear alimento<span className="block text-[11px] text-muted">con su etiqueta</span></span>
+          </button>
+        </div>
+      )}
 
       {shown.length > 0 && (
         <ul className="divide-y divide-line/60 overflow-hidden rounded-2xl border border-line bg-card">
@@ -126,7 +213,7 @@ function FoodSearch({ meal, setMeal, date, onPick, onCustom }:
       )}
       {shown.length === 0 && scope !== 'todos' && (
         <p className="py-8 text-center text-sm text-muted">
-          {scope === 'recientes' ? 'Aún no tienes alimentos recientes.' : 'Aún no has creado alimentos personalizados.'}
+          {scope === 'recientes' ? 'Aún no tienes alimentos recientes.' : 'Aún no has creado alimentos ni platillos.'}
         </p>
       )}
 
@@ -163,9 +250,9 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   )
 }
 
-function SourceBadge({ source }: { source: Food['source'] }) {
-  const cls = { macrofit: 'bg-brand/10 text-brand', openfoodfacts: 'bg-brand-2/10 text-brand-2', custom: 'bg-fat/10 text-fat' }[source]
-  return <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{SOURCE_LABEL[source]}</span>
+function SourceBadge({ food }: { food: Food }) {
+  const cls = { macrofit: 'bg-brand/10 text-brand', openfoodfacts: 'bg-brand-2/10 text-brand-2', custom: 'bg-fat/10 text-fat' }[food.source]
+  return <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{food.recipe ? 'Mi platillo' : SOURCE_LABEL[food.source]}</span>
 }
 
 function FoodRow({ food, onClick }: { food: Food; onClick: () => void }) {
@@ -180,7 +267,7 @@ function FoodRow({ food, onClick }: { food: Food; onClick: () => void }) {
             {food.brand && <span className="truncate">{food.brand} ·</span>}
             <span className="nums truncate">{s ? `${s.label} (${s.grams} g)` : '100 g'}</span>
           </div>
-          <div className="mt-1"><SourceBadge source={food.source} /></div>
+          <div className="mt-1"><SourceBadge food={food} /></div>
         </div>
         <div className="nums text-right">
           <div className="font-semibold">{Math.round(m.kcal)}</div>
@@ -193,17 +280,22 @@ function FoodRow({ food, onClick }: { food: Food; onClick: () => void }) {
 
 /* ---------------- Detalle / cantidad ---------------- */
 
-function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, onDone }: {
+type Portion = Pick<RecipeIngredient, 'grams' | 'quantity' | 'servingLabel'>
+
+function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, onDone, ingredient }: {
   food: Food; meal: MealType; setMeal: (m: MealType) => void; date: string; editing: LogEntry | null
   onBack?: () => void; onEditFood?: () => void; onDone: () => void
+  /** Modo ingrediente: la cantidad se devuelve al platillo en vez de registrarse. */
+  ingredient?: { initial?: Portion; onSubmit: (p: Portion) => void; onRemove?: () => void }
 }) {
   const addEntry = useStore((s) => s.addEntry)
   const updateEntry = useStore((s) => s.updateEntry)
   const removeEntry = useStore((s) => s.removeEntry)
   const units = [{ label: 'g', grams: 1 }, ...food.servings]
-  const initialUnit = editing ? editing.servingLabel : food.servings[0]?.label ?? 'g'
+  const prev: Portion | undefined = editing ?? ingredient?.initial
+  const initialUnit = prev ? prev.servingLabel : food.servings[0]?.label ?? 'g'
   const [unit, setUnit] = useState(units.some((u) => u.label === initialUnit) ? initialUnit : 'g')
-  const [qty, setQty] = useState<number>(editing ? round(editing.quantity, 2) : unit === 'g' ? 100 : 1)
+  const [qty, setQty] = useState<number>(prev ? round(prev.quantity, 2) : unit === 'g' ? 100 : 1)
 
   const u = units.find((x) => x.label === unit) ?? units[0]
   const grams = (Number.isFinite(qty) ? qty : 0) * u.grams
@@ -220,7 +312,8 @@ function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, on
 
   const save = () => {
     if (!valid) return
-    if (editing) updateEntry(editing.id, { grams, quantity: qty, servingLabel: unit, meal })
+    if (ingredient) ingredient.onSubmit({ grams, quantity: qty, servingLabel: unit })
+    else if (editing) updateEntry(editing.id, { grams, quantity: qty, servingLabel: unit, meal })
     else addEntry({ date, meal, food, grams, quantity: qty, servingLabel: unit })
     onDone()
   }
@@ -237,7 +330,7 @@ function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, on
           <h3 className="font-display text-xl font-semibold leading-snug">{food.name}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
             {food.brand && <span>{food.brand}</span>}
-            <SourceBadge source={food.source} />
+            <SourceBadge food={food} />
             {food.barcode && <span className="nums text-xs">#{food.barcode}</span>}
           </div>
         </div>
@@ -294,10 +387,12 @@ function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, on
         )}
       </div>
 
-      <div>
-        <Label>Comida</Label>
-        <Segmented value={meal} onChange={setMeal} options={MEALS.map((x) => ({ value: x.id, label: x.label }))} />
-      </div>
+      {!ingredient && (
+        <div>
+          <Label>Comida</Label>
+          <Segmented value={meal} onChange={setMeal} options={MEALS.map((x) => ({ value: x.id, label: x.label }))} />
+        </div>
+      )}
 
       <div className="rounded-2xl border border-line bg-card px-4 py-3 text-sm">
         <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">Por 100 g</div>
@@ -310,13 +405,14 @@ function FoodDetail({ food, meal, setMeal, date, editing, onBack, onEditFood, on
       </div>
 
       <div className="flex gap-2 pb-2">
-        {editing && (
-          <Button variant="danger" className="!px-4" onClick={() => { removeEntry(editing.id); onDone() }} aria-label="Eliminar registro">
+        {(editing || ingredient?.onRemove) && (
+          <Button variant="danger" className="!px-4" aria-label="Eliminar"
+            onClick={() => { if (ingredient?.onRemove) ingredient.onRemove(); else if (editing) removeEntry(editing.id); onDone() }}>
             <IconTrash width={20} height={20} />
           </Button>
         )}
         <Button className="flex-1" disabled={!valid} onClick={save}>
-          {editing ? 'Guardar cambios' : `Agregar a ${MEAL_LABEL[meal]}`}
+          {ingredient ? (ingredient.initial ? 'Guardar ingrediente' : 'Agregar al platillo') : editing ? 'Guardar cambios' : `Agregar a ${MEAL_LABEL[meal]}`}
         </Button>
       </div>
     </div>
@@ -404,6 +500,127 @@ function CustomFoodForm({ initial, onBack, onSaved, onDeleted }: { initial?: Foo
         )}
         <Button className="flex-1" disabled={!valid} onClick={save}>Guardar alimento</Button>
       </div>
+    </div>
+  )
+}
+
+/* ---------------- Platillo con ingredientes ---------------- */
+
+function RecipeBuilder({ draft, setDraft, onBack, onAddIngredient, onEditIngredient, onSaved, onDeleted }: {
+  draft: RecipeDraft; setDraft: (f: (d: RecipeDraft) => RecipeDraft) => void
+  onBack: () => void; onAddIngredient: () => void; onEditIngredient: (i: number) => void
+  onSaved: (f: Food) => void; onDeleted: () => void
+}) {
+  const saveCustomFood = useStore((s) => s.saveCustomFood)
+  const removeCustomFood = useStore((s) => s.removeCustomFood)
+  const set = <K extends keyof RecipeDraft>(k: K, v: RecipeDraft[K]) => setDraft((d) => ({ ...d, [k]: v }))
+
+  const total = sumMacros(draft.ingredients.map((i) => macrosFor(i.food, i.grams)))
+  const totalGrams = draft.ingredients.reduce((a, i) => a + i.grams, 0)
+  const portions = Number.isFinite(draft.portions) && draft.portions > 0 ? draft.portions : 1
+  const per = { kcal: total.kcal / portions, protein: total.protein / portions, carbs: total.carbs / portions, fat: total.fat / portions }
+  const valid = draft.name.trim() && draft.ingredients.length > 0 && totalGrams > 0
+
+  const save = () => {
+    if (!valid) return
+    const k = 100 / totalGrams
+    const fiber = draft.ingredients.reduce((a, i) => a + ((i.food.per100.fiber ?? 0) * i.grams) / 100, 0)
+    const label = draft.portionLabel.trim() || 'porción'
+    const food = saveCustomFood({
+      id: draft.id,
+      name: draft.name.trim(),
+      per100: {
+        kcal: round(total.kcal * k, 1), protein: round(total.protein * k, 2), carbs: round(total.carbs * k, 2),
+        fat: round(total.fat * k, 2), fiber: round(fiber * k, 2),
+      },
+      servings: [
+        { label, grams: round(totalGrams / portions, 1) },
+        ...(portions > 1 ? [{ label: 'platillo completo', grams: round(totalGrams, 1) }] : []),
+      ],
+      recipe: { ingredients: draft.ingredients, portions },
+    })
+    onSaved(food)
+  }
+
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted"><IconChevronL width={18} height={18} /> Volver</button>
+
+      <div>
+        <Label>Nombre del platillo</Label>
+        <input className="field" value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Ej. Hot dog casero" />
+      </div>
+
+      <div>
+        <Label hint={draft.ingredients.length ? `${round(totalGrams)} g en total` : undefined}>Ingredientes</Label>
+        {draft.ingredients.length > 0 && (
+          <ul className="mb-2 divide-y divide-line/60 overflow-hidden rounded-2xl border border-line bg-card">
+            {draft.ingredients.map((i, idx) => {
+              const m = macrosFor(i.food, i.grams)
+              return (
+                <li key={idx}>
+                  <button onClick={() => onEditIngredient(idx)} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-card-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px]">{i.food.name}</div>
+                      <div className="nums truncate text-xs text-muted">
+                        {i.servingLabel === 'g' ? `${round(i.grams)} g` : `${round(i.quantity, 2)} × ${i.servingLabel} (${round(i.grams)} g)`}
+                      </div>
+                    </div>
+                    <div className="nums text-right text-sm">
+                      <div className="font-semibold">{Math.round(m.kcal)}</div>
+                      <div className="text-[11px] text-muted">{round(m.protein, 1)} g P</div>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <button onClick={onAddIngredient}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/50 px-4 py-3 text-sm text-brand active:bg-brand/10">
+          <IconPlus width={18} height={18} /> Agregar ingrediente
+        </button>
+        {draft.ingredients.length === 0 && (
+          <p className="mt-2 px-1 text-xs text-muted">Busca cada ingrediente como si lo registraras (ej. pan para hot dog, salchicha, catsup) y elige la cantidad que lleva.</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>¿Cuántas porciones rinde?</Label><NumberField value={draft.portions} onChange={(v) => set('portions', v)} min={1} step={1} /></div>
+        <div><Label>Nombre de la porción</Label><input className="field" value={draft.portionLabel} onChange={(e) => set('portionLabel', e.target.value)} /></div>
+      </div>
+
+      {draft.ingredients.length > 0 && (
+        <div className="glow rounded-3xl border border-line p-4">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
+            {portions > 1 ? `Por ${draft.portionLabel || 'porción'} (1 de ${portions})` : 'Platillo completo'}
+          </div>
+          <div className="flex items-end justify-between">
+            <div>
+              <div className="nums font-display text-3xl font-bold">{Math.round(per.kcal)}</div>
+              <div className="text-xs text-muted">kcal · {round(totalGrams / portions)} g</div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              {([['Proteína', per.protein, COLORS.protein], ['Carbs', per.carbs, COLORS.carbs], ['Grasa', per.fat, COLORS.fat]] as const).map(([l, v, c]) => (
+                <div key={l}>
+                  <div className="nums text-lg font-semibold">{round(v, 1)}<span className="text-xs text-muted">g</span></div>
+                  <div className="flex items-center justify-center gap-1 text-[11px] text-muted"><span className="h-1.5 w-1.5 rounded-full" style={{ background: c }} />{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 pb-2">
+        {draft.id && (
+          <Button variant="danger" className="!px-4" aria-label="Eliminar platillo" onClick={() => { removeCustomFood(draft.id!); onDeleted() }}>
+            <IconTrash width={20} height={20} />
+          </Button>
+        )}
+        <Button className="flex-1" disabled={!valid} onClick={save}>Guardar platillo</Button>
+      </div>
+      <p className="text-center text-xs text-muted">Se guarda en <b className="text-soft">Mis alimentos</b> para registrarlo con un toque.</p>
     </div>
   )
 }

@@ -57,6 +57,20 @@ export interface Food {
   servings: Serving[]
   category?: string
   barcode?: string
+  /** Solo en platillos creados por el usuario a partir de ingredientes. */
+  recipe?: Recipe
+}
+
+export interface RecipeIngredient {
+  food: Food
+  grams: number
+  quantity: number
+  servingLabel: string
+}
+
+export interface Recipe {
+  ingredients: RecipeIngredient[]
+  portions: number
 }
 
 export interface CustomFood extends Food, Syncable {}

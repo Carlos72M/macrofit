@@ -1,5 +1,5 @@
 // Service worker de MacroFit: app shell offline + caché de la API de alimentos.
-const VERSION = 'macrofit-v1'
+const VERSION = 'macrofit-v2'
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/apple-touch-icon.png']
 
 self.addEventListener('install', (e) => {
