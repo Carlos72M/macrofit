@@ -30,6 +30,8 @@ export default function App() {
       {tab === 'diario' && <Diary date={date} setDate={setDate} onAdd={(m) => openAdd(m, date)} onEdit={setEditing} />}
       {tab === 'peso' && <WeightScreen />}
       {tab === 'perfil' && <ProfileScreen />}
+      {/* Franja bajo la barra de estado del iPhone para que el contenido no se encime con la hora */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-bg/90 backdrop-blur-xl" />
       <BottomNav tab={tab} onTab={setTab} onAdd={() => openAdd()} />
       <AddFoodFlow target={adding} editing={editing}
         onClose={() => { setAdding(null); setEditing(null) }} />

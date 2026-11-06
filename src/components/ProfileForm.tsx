@@ -132,7 +132,7 @@ export function ProfileForm({ initial, onSave, cta = 'Guardar perfil' }: { initi
         </Card>
       )}
 
-      <Button className="sticky bottom-28 z-10 w-full" disabled={!canSave || (!changed && cta === 'Guardar perfil')} onClick={() => onSave(d)}>
+      <Button className={`w-full ${changed ? 'sticky bottom-28 z-10' : ''}`} disabled={!canSave || (!changed && cta === 'Guardar perfil')} onClick={() => onSave(d)}>
         {cta === 'Guardar perfil' && !changed ? 'Perfil guardado' : cta}
       </Button>
     </div>
