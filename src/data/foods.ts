@@ -124,6 +124,24 @@ const rows: Row[] = [
   ['Huevos a la mexicana', '', 'Platillos', 150, 9.5, 3.5, 11, 1, 'porción:150'],
   ['Mole poblano con pollo', '', 'Platillos', 185, 14, 8, 11, 2, 'porción:250'],
   ['Caldo de pollo', '', 'Platillos', 45, 5, 3, 1.5, 0.5, 'plato:400'],
+  ['Flautas de pollo', '', 'Platillos', 260, 11, 22, 14, 2.5, 'pieza:60|orden (3):180'],
+  ['Gordita de chicharrón', '', 'Platillos', 280, 9, 30, 14, 3, 'pieza:120'],
+  ['Esquite (elote en vaso con mayonesa y queso)', '', 'Platillos', 160, 4, 18, 8.5, 2, 'vaso chico:250'],
+  ['Burrito de frijol con queso', '', 'Platillos', 205, 8, 28, 7, 3.5, 'pieza:200'],
+  ['Hot cakes (sin miel)', '', 'Platillos', 227, 6.4, 28, 9.7, 1, 'pieza:40|orden (3):120'],
+
+  // Comida rápida
+  ['Hot dog (perro caliente) con pan', '', 'Comida rápida', 247, 10.6, 18.4, 14.8, 0.8, 'pieza:100|2 piezas:200'],
+  ['Pan para hot dog', 'Bimbo', 'Comida rápida', 270, 8, 49, 4.5, 2, 'pieza:50'],
+  ['Salchicha para hot dog (res/cerdo)', '', 'Comida rápida', 290, 10.3, 4.2, 26, 0, 'pieza:45'],
+  ['Hamburguesa sencilla', '', 'Comida rápida', 254, 12.5, 30, 9.5, 1.5, 'pieza:110'],
+  ['Hamburguesa con queso', '', 'Comida rápida', 263, 13, 25, 12, 1.5, 'pieza:150|doble:230'],
+  ['Pizza de pepperoni', '', 'Comida rápida', 298, 12, 33, 13, 2, 'rebanada:110'],
+  ['Pizza de queso', '', 'Comida rápida', 266, 11.4, 33, 9.7, 2.3, 'rebanada:107'],
+  ['Papas a la francesa', '', 'Comida rápida', 312, 3.4, 41, 15, 3.8, 'orden chica:75|orden mediana:117'],
+  ['Nuggets de pollo', '', 'Comida rápida', 296, 15, 15, 20, 1, '6 piezas:96|pieza:16'],
+  ['Catsup', 'Del Monte', 'Comida rápida', 101, 1, 27, 0.1, 0.3, 'cucharada:17'],
+  ['Mostaza', '', 'Comida rápida', 60, 3.7, 5.8, 3.3, 3.3, 'cucharadita:5'],
 
   // Bebidas y snacks de marca
   ['Refresco de cola', 'Coca-Cola', 'Bebidas', 42, 0, 10.6, 0, 0, 'lata (355 ml):355|botella (600 ml):600'],

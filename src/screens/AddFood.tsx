@@ -119,6 +119,11 @@ function FoodSearch({ meal, setMeal, date, onPick, onCustom }:
           {shown.map((f) => <FoodRow key={f.id} food={f} onClick={() => onPick(f)} />)}
         </ul>
       )}
+      {shown.length === 0 && scope === 'todos' && q.trim() && (
+        <p className="rounded-2xl bg-card px-4 py-3 text-sm text-muted">
+          No está en la base local. Prueba con otro nombre o registra sus ingredientes por separado (ej. “pan”, “salchicha”).
+        </p>
+      )}
       {shown.length === 0 && scope !== 'todos' && (
         <p className="py-8 text-center text-sm text-muted">
           {scope === 'recientes' ? 'Aún no tienes alimentos recientes.' : 'Aún no has creado alimentos personalizados.'}
@@ -386,6 +391,10 @@ function CustomFoodForm({ initial, onBack, onSaved, onDeleted }: { initial?: Foo
         <div><Label>Fibra (opcional)</Label><NumberField value={fiber} onChange={setFiber} suffix="g" step={0.1} /></div>
       </div>
       <p className="text-xs text-muted">Si dejas las calorías vacías se calculan con los macros (4/4/9 kcal por gramo).</p>
+      <div className="rounded-2xl border border-line bg-card px-4 py-3 text-xs leading-relaxed text-soft">
+        <b className="text-ink">¿No conoces los valores?</b> Copia los de la tabla nutrimental del empaque. Si es un platillo,
+        vuelve atrás y registra sus ingredientes por separado (por ejemplo: pan, salchicha y catsup).
+      </div>
 
       <div className="flex gap-2 pb-2">
         {initial && (
